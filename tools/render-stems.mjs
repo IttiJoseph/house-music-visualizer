@@ -10,7 +10,10 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
 const STEMS = ['kick', 'bass', 'snare', 'hats', 'groove', 'percs', 'epiano', 'piano', 'guitar'];
-const wanted = process.argv.slice(2).length ? process.argv.slice(2) : STEMS;
+const args = process.argv.slice(2);
+const hitsOnly = args.includes('--hits-only');   // re-export hits.json without touching the .wav files
+const named = args.filter((a) => !a.startsWith('--'));
+const wanted = named.length ? named : STEMS;
 
 const LOOP_CYCLES = 8;             // 8 cycles x 2 s = 16 s
 const RENDER_CYCLES = 16;          // render twice as long, keep the second half,
@@ -57,10 +60,13 @@ for (const name of wanted) {
     [`${definitions}\n${name}`, { cycles: RENDER_CYCLES, keepFrom: RENDER_CYCLES - LOOP_CYCLES, keepTo: RENDER_CYCLES }],
   );
   await page.close();
-  fs.writeFileSync(path.join(here, 'renders', `${name}.wav`), wav(r.pcm, r.frames));
+  if (!hitsOnly) fs.writeFileSync(path.join(here, 'renders', `${name}.wav`), wav(r.pcm, r.frames));
   hits[name] = r.hits;
+  // Stems made of several sounds also get one list per sound, e.g. "hats:hh" and "hats:tr707_hh".
+  for (const key of Object.keys(hits)) if (key.startsWith(`${name}:`)) delete hits[key];
+  if (Object.keys(r.bySound).length > 1) for (const [snd, t] of Object.entries(r.bySound)) hits[`${name}:${snd}`] = t;
   console.log(`${r.hits.length} hits, peak ${r.peak.toFixed(2)}, ${(r.frames / 44100).toFixed(3)} s`);
 }
-const ordered = Object.fromEntries(STEMS.filter((s) => hits[s]).map((s) => [s, hits[s]]));
+const ordered = Object.fromEntries(Object.keys(hits).sort((a, b) => STEMS.indexOf(a.split(':')[0]) - STEMS.indexOf(b.split(':')[0]) || a.localeCompare(b)).map((k) => [k, hits[k]]));
 fs.writeFileSync(hitsFile, JSON.stringify(ordered));
 await browser.close(); await server.close();

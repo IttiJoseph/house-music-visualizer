@@ -76,9 +76,15 @@ window.renderStem = async (code, { cycles, keepFrom, keepTo }) => {
     .filter((h) => h.hasOnset())
     .map((h) => +((h.whole.begin.valueOf() - keepFrom) / cps).toFixed(4))
     .sort((x, y) => x - y);
+  // The same onsets grouped by sound name (for stems made of several sounds, e.g. two kinds of hat).
+  const bySound = {};
+  for (const h of pattern.queryArc(keepFrom, keepTo, { _cps: cps }).filter((h) => h.hasOnset())) {
+    (bySound[h.value.s ?? 'note'] ??= []).push(+((h.whole.begin.valueOf() - keepFrom) / cps).toFixed(4));
+  }
+  for (const k in bySound) bySound[k].sort((x, y) => x - y);
   // Base64 so it can cross from the browser to Node.
   let bin = ''; const bytes = new Uint8Array(out.buffer);
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return { pcm: btoa(bin), peak, hits, frames: b - a, cps };
+  return { pcm: btoa(bin), peak, hits, bySound, frames: b - a, cps };
 };
 window.rendererReady = ready;

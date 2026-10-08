@@ -1,5 +1,4 @@
-/* Night House — layout: one wide hand-drawn scene, a slim control strip beneath it.
-   Single night-time look by design. */
+/* House Music — one hand-drawn house on a painted night sky. Single night-time look by design. */
 
 /* TITLE FONT: swap the family in --font-hand to change the font everywhere.
    Shantell Sans is self-hosted (public/fonts) so the site makes no outside requests. */
@@ -22,37 +21,60 @@
   color-scheme: dark;
 }
 
-/* BACKGROUND: change this one rule to give the page a custom background. */
-html, body { background: var(--sky); color: var(--chalk); }
+/* BACKGROUND: the painted night sky is on .frame below (public/img/background.jpg).
+   This is the colour behind it, only ever visible for a moment while the picture loads. */
+html, body { background: #3c2d8e; color: var(--chalk); margin: 0; overflow-x: clip; }
+body { font-family: var(--font-hand); font-size: 14px; }
 
-body {
-  margin: 0;
-  font-family: var(--font-hand);
-  font-size: 14px;
-  padding-inline: 16px;
-  padding-block: 24px 32px;
-  padding-top: max(24px, env(safe-area-inset-top));
-  padding-bottom: max(32px, env(safe-area-inset-bottom));
+/* THE COMPOSITION. The picture always fills the whole screen edge to edge.
+   .frame is the 16:9 painting; everything inside is placed in percentages of it, so the house,
+   title and background scale together. .stage shows the frame but trims the bottom ~5 % (grass),
+   which lets the picture be bigger on wide screens. To show more or less grass, change 0.5325 and
+   -0.03 below together (they must add up to 0.5625) and 187.8 (= 100 / 0.5325).
+   Very wide, short windows scroll a little. */
+.stage {
+  --W: max(100vw, min(187.8svh, 123vw));  /* painting width: fill the screen, but never crop the house off */
+  position: relative;
+  width: 100%;
+  height: max(100svh, calc(var(--W) * 0.5325));
+  overflow: hidden;
+  background: #3c2d8e;                     /* matches the top edge of the painting if the screen is taller than it */
 }
-.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
-.scene-box { background: transparent; }
+.frame {
+  position: absolute; left: 0; bottom: calc(var(--W) * -0.03);  /* sits on the bottom; the lowest ~5 % of the picture (grass) is trimmed */
+  width: var(--W); aspect-ratio: 16 / 9;
+  container-type: inline-size;           /* lets sizes be written in cqw = % of the frame width */
+  background: url("public/img/background.jpg") left top / cover no-repeat, #3c2d8e;
+}
+/* If the screen is taller than the painting, the extra sky above it is plain colour; this softens the seam. */
+.frame::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 9%; pointer-events: none;
+                 background: linear-gradient(#3c2d8e, rgba(60, 45, 142, 0)); }
+.scene-box { position: absolute; left: 3.9%; top: 11.8%; width: 74.6%; }
 svg#scene { display: block; width: 100%; height: auto; }
 
-.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
-.bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; letter-spacing: .01em; text-wrap: balance; }
-.bar p { margin: 2px 0 0; color: var(--chalk-dim); font-size: .95rem; min-height: 1.4em; }
-.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.count { font-variant-numeric: tabular-nums; color: var(--chalk-dim); margin-right: 4px; }
-.count b { color: var(--lamp); font-weight: 800; }
+/* TITLE: two separate images, one per word (public/img/title-house.svg and title-music.svg), each
+   tilted on its own. Nudge a word by changing its left / top / width (% of the picture) or rotate. */
+.title { position: absolute; inset: 0; margin: 0; pointer-events: none; }
+.word { position: absolute; display: block; height: auto; }
+.word-house { left: 26.5%;   top: 4.9%;  width: 19.5%; transform: rotate(-12deg); }
+.word-music { left: 47.3%; top: 17.1%; width: 19.5%; transform: rotate(17deg); }
 
-button {
-  font: 600 .95rem var(--font-hand); color: var(--ink); background: var(--chalk);
-  border: 2.5px solid var(--ink); border-radius: 10px 14px 9px 13px / 13px 9px 14px 10px;
-  padding: 6px 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); transition: transform .08s, box-shadow .08s;
+/* Only shown if the music fails to load; otherwise visually hidden but still read aloud. */
+.status { position: fixed; left: 50%; bottom: 16px; translate: -50% 0; margin: 0; max-width: 90vw;
+          padding: 8px 14px; border-radius: 10px; background: var(--chalk); color: var(--ink); font-weight: 600; }
+.status:not(.error) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; white-space: nowrap; }
+
+/* Phones and narrow windows: the house fills the width, title above it, painting behind. */
+@media (max-width: 760px) {
+  .stage { height: auto; min-height: 100svh; overflow: visible; }
+  .frame::before { display: none; }
+  .frame { position: relative; bottom: auto; width: 100%; aspect-ratio: auto; min-height: 100svh; box-sizing: border-box;
+           padding: 26% 3% 8%; display: grid; align-content: center;
+           background-size: cover; background-position: 15% bottom; }
+  .scene-box { position: relative; left: auto; top: auto; width: auto; }
+  .word-house { left: 4%;  top: 6cqw;  width: 44%; transform: rotate(-8deg); }
+  .word-music { left: 51%; top: 10cqw; width: 45%; transform: rotate(9deg); }
 }
-button:hover { background: var(--lamp); }
-button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
-button:focus-visible { outline: 3px dashed var(--lamp); outline-offset: 3px; }
 
 /* Rooms: light on/off */
 .room .light, .room .night { transition: opacity .16s cubic-bezier(.65, 0, .35, 1); }
@@ -65,10 +87,7 @@ button:focus-visible { outline: 3px dashed var(--lamp); outline-offset: 3px; }
 
 /* Loading state while the nine stems download and decode */
 body.loading .scene-box { cursor: progress; }
-body.loading .count { animation: pulse 1s ease-in-out infinite alternate; }
-@keyframes pulse { to { opacity: .35; } }
 
 @media (prefers-reduced-motion: reduce) {
   .room .light, .room .night { transition: none; }
-  body.loading .count { animation: none; }
 }

@@ -11,7 +11,7 @@ let snareVol  = 0.7;
 let hatsVol   = 0.8;
 let grooveVol = 0.7;
 let percsVol  = 0.6;
-let epianoVol = 1;
+let epianoVol = 0.8;
 let pianoVol  = 0.7;
 let guitarVol = 0.8;
 

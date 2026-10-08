@@ -1,6 +1,6 @@
 // Night House — the whole live site's behaviour in one file.
 //
-//   1. ROOMS   the lights, buttons and captions (same behaviour as the original house)
+//   1. ROOMS   the lights and clickable rooms (same behaviour as the original house)
 //   2. ENGINE  plays the 9 pre-rendered stems in sync and fades each one in/out on the bar
 //   3. HITS    watches the same clock to shake a room's furniture on every note
 //
@@ -25,18 +25,26 @@
   const FADE_SECONDS = 0.03; // volume fade when a room is switched on/off
   const MASTER_GAIN = 0.6;   // headroom: nine stems summed would otherwise clip
 
-  // Shake size per instrument, in drawing units (about 1 px each). Set to 0 to turn one off.
-  const SHAKE = {
-    kick: 1.6, snare: 1.3, bass: 1.2, piano: 0.9, groove: 0.8,
-    percs: 0.8, guitar: 0.7, epiano: 0.5, hats: 0.35,
+  // Shake: every note nudges each object in the room in its own random direction.
+  // One distance for every instrument, so a hi-hat is as visible as a kick.
+  const SHAKE_DISTANCE = 3;   // in drawing units (about 1.4 px each on a wide screen)
+  const SHAKE_SPREAD_MS = 40; // each object starts up to this much late, so they don't move in lockstep
+  const SHAKE_MS = 150;
+
+  // Optional: make different objects in a room react to different sounds of its instrument.
+  // `sound` names a list in hits.json, `items` are the room's objects counted from 0 in drawing
+  // order. A room not listed here shakes all its objects on every note.
+  const REACTIONS = {
+    bath: [
+      { sound: 'hats:hh',        items: [0, 3] }, // closed hat  -> mirror, plant
+      { sound: 'hats:tr707_hh',  items: [1] },    // offbeat hat -> sink  (item 2, the mat, stays still)
+    ],
   };
-  const SHAKE_MS = 130;
 
   // ───────────────────────── 1. ROOMS ─────────────────────────
 
-  const caption = document.getElementById('caption');
-  const count = document.getElementById('count');
-  let defaultCaption = caption.textContent; // what the caption shows when nothing is hovered
+  // Invisible status line for screen readers; it only becomes visible if the music fails to load.
+  const status = document.getElementById('status');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   const rooms = [...document.querySelectorAll('g.room[data-room]')].map((g) => {
@@ -44,11 +52,18 @@
     return {
       id, g, name: ROOM_NAMES[id], stem: STEM_FOR_ROOM[id],
       hit: g.querySelector('.hit'),
-      objs: g.querySelector('.objs'), // the furniture, wrapped so it can shake
+      items: [...g.querySelectorAll('.item')], // each piece of furniture, shaken separately
+      reactions: null,                         // filled in just below
       on: false,                      // light state (changes instantly on click)
       // audio state, filled in by the engine:
-      gain: null, target: false, pending: null, changes: [{ t: -Infinity, on: false }],
+      gain: null, target: false, changes: [{ t: -Infinity, on: false }],
     };
+  });
+
+  rooms.forEach((room) => {
+    const all = room.items.map((_, i) => i);
+    room.reactions = (REACTIONS[room.id] || [{ sound: room.stem, items: all }])
+      .map((r) => ({ sound: r.sound, items: r.items.map((i) => room.items[i]) }));
   });
 
   function paint(room) {
@@ -57,17 +72,12 @@
     room.hit.setAttribute('aria-label', `${room.name} light`);
   }
 
-  function updateCount() {
-    const n = rooms.filter((r) => r.on).length;
-    count.innerHTML = engine.loading ? 'Tuning up…' : `<b>${n}</b> of ${rooms.length} lit`;
-  }
-
   const label = (r) => `${r.name}: light ${r.on ? 'on' : 'off'}`;
 
   function toggle(room) {
     setRooms([[room, !room.on]]);
     room.g.classList.toggle('suppress', !room.on);
-    caption.textContent = label(room);
+    status.textContent = label(room);
   }
 
   // Flip lights immediately; tell the engine so the sound follows on the next bar.
@@ -79,7 +89,6 @@
       paint(room);
       engine.setRoomAudible(room, on, bar);
     }
-    updateCount();
   }
 
   rooms.forEach((room) => {
@@ -88,15 +97,8 @@
     room.hit.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(room); }
     });
-    room.hit.addEventListener('pointerenter', () => { caption.textContent = label(room); });
-    room.hit.addEventListener('focus', () => { caption.textContent = label(room); });
-    room.hit.addEventListener('pointerleave', () => {
-      room.g.classList.remove('suppress');
-      caption.textContent = defaultCaption;
-    });
+    room.hit.addEventListener('pointerleave', () => room.g.classList.remove('suppress'));
   });
-  document.getElementById('allOn').addEventListener('click', () => setRooms(rooms.map((r) => [r, true])));
-  document.getElementById('allOff').addEventListener('click', () => setRooms(rooms.map((r) => [r, false])));
 
   // ───────────────────────── 2. ENGINE ─────────────────────────
   //
@@ -123,20 +125,19 @@
       this.ctx.resume(); // must happen inside the click for Safari / iOS
       this.loading = true;
       document.body.classList.add('loading');
-      caption.textContent = defaultCaption = 'Tuning up the band…';
+      status.textContent = 'Tuning up the band…';
       this.load().then(
         () => {
           this.loading = false;
           document.body.classList.remove('loading');
-          caption.textContent = defaultCaption = 'Click a room to switch on its light and its instrument.';
-          updateCount();
+          status.textContent = '';
         },
         (err) => {
           console.error(err);
           this.loading = false; this.failed = true;
           document.body.classList.remove('loading');
-          caption.textContent = defaultCaption = "Couldn't load the music. Check your connection and reload.";
-          updateCount();
+          status.textContent = "Couldn't load the music. Check your connection and reload.";
+          status.classList.add('error'); // make it visible
         },
       );
     },
@@ -194,19 +195,21 @@
       return t;
     },
 
-    // Fade a room's volume in/out starting exactly on `bar`.
+    // Switching ON waits for `bar` (the next bar line), so the layer enters on the beat.
+    // Switching OFF is immediate (a 30 ms fade, so there is no click).
     setRoomAudible(room, on, bar) {
-      if (!this.ready) return; // handled by load() once the stems arrive
+      if (!this.ready || room.target === on) return; // before loading, load() sets the sound up
       const g = room.gain.gain;
-      let p = room.pending;
-      if (!p || p.bar !== bar) p = room.pending = { bar, from: room.target };
-      else g.cancelScheduledValues(bar); // changed their mind within the same bar
-      g.setValueAtTime(p.from ? 1 : 0, bar);
-      g.linearRampToValueAtTime(on ? 1 : 0, bar + FADE_SECONDS);
+      const now = this.ctx.currentTime;
+      const at = on ? bar : now + 0.005;
+      const from = on ? 0 : g.value; // volume right now (0 if it was still waiting for its bar)
+      g.cancelScheduledValues(on ? bar : now); // drop any change that hasn't happened yet
+      g.setValueAtTime(from, at);
+      g.linearRampToValueAtTime(on ? 1 : 0, at + FADE_SECONDS);
       room.target = on;
-      // Remember when this room is audible (used to time the shake). Drop old entries.
-      room.changes = room.changes.filter((c) => c.t < bar);
-      room.changes.push({ t: bar, on });
+      // Remember when this room is audible (used to time the shake). Drop entries that no longer apply.
+      room.changes = room.changes.filter((c) => c.t < at);
+      room.changes.push({ t: at, on });
     },
 
     // Will this room be audible at audio-clock time t?
@@ -231,15 +234,17 @@
     if (!cursor || heard - cursor > 0.5) cursor = Math.max(heard, engine.start); // tab was asleep: skip ahead
     if (heard > cursor && engine.hits) {
       for (const room of rooms) {
-        const times = engine.hits[room.stem];
-        if (!times) continue;
         const loop0 = Math.floor((cursor - engine.start) / LOOP_SECONDS);
         const loop1 = Math.floor((heard - engine.start) / LOOP_SECONDS);
-        for (let loop = loop0; loop <= loop1; loop++) {
-          const base = engine.start + loop * LOOP_SECONDS;
-          for (const h of times) {
-            const t = base + h;
-            if (t > cursor && t <= heard && engine.audibleAt(room, t)) onHit(room);
+        for (const reaction of room.reactions) {
+          const times = engine.hits[reaction.sound];
+          if (!times) continue;
+          for (let loop = loop0; loop <= loop1; loop++) {
+            const base = engine.start + loop * LOOP_SECONDS;
+            for (const h of times) {
+              const t = base + h;
+              if (t > cursor && t <= heard && engine.audibleAt(room, t)) onHit(room, reaction.items);
+            }
           }
         }
       }
@@ -248,27 +253,28 @@
     requestAnimationFrame(hitLoop);
   }
 
-  // One note was just heard in `room`. Add more visual reactions here
-  // (for example a light flicker on room.g.querySelector('.light')).
-  function onHit(room) {
-    shake(room);
+  // One note was just heard in `room`; `items` are the objects that react to it.
+  // Add more visual reactions here (for example a light flicker on room.g.querySelector('.light')).
+  function onHit(room, items) {
+    shake(items);
   }
 
-  function shake(room) {
-    const size = SHAKE[room.stem];
-    if (!size || reduceMotion.matches || !room.objs.animate) return;
-    const a = Math.random() * Math.PI * 2;
-    const dx = Math.cos(a) * size, dy = Math.sin(a) * size;
-    room.objs.animate(
-      [
-        { transform: 'translate(0px, 0px)' },
-        { transform: `translate(${dx}px, ${dy}px)`, offset: 0.2 },
-        { transform: `translate(${-dx * 0.5}px, ${-dy * 0.5}px)`, offset: 0.55 },
-        { transform: 'translate(0px, 0px)' },
-      ],
-      { duration: SHAKE_MS, easing: 'ease-out' },
-    );
+  function shake(items) {
+    if (reduceMotion.matches) return;
+    for (const item of items) {
+      // Each object picks its own direction and its own tiny delay.
+      const angle = Math.random() * Math.PI * 2;
+      const dx = Math.cos(angle) * SHAKE_DISTANCE, dy = Math.sin(angle) * SHAKE_DISTANCE;
+      item.animate(
+        [
+          { transform: 'translate(0px, 0px)' },
+          { transform: `translate(${dx}px, ${dy}px)`, offset: 0.25 },
+          { transform: `translate(${-dx * 0.4}px, ${-dy * 0.4}px)`, offset: 0.6 },
+          { transform: 'translate(0px, 0px)' },
+        ],
+        { duration: SHAKE_MS, delay: Math.random() * SHAKE_SPREAD_MS, easing: 'ease-out' },
+      );
+    }
   }
 
-  updateCount();
 })();
