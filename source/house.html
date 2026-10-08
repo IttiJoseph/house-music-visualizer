@@ -1,0 +1,520 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Night House Layout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shantell+Sans:wght@400;600;800&display=swap">
+<style>
+  /* Layout: one wide hand-drawn scene, a slim control strip beneath it. Single night-time look by design. */
+  :root {
+    --sky: #3b3c96;
+    --sky-deep: #262872;
+    --ink: #0b0b0d;
+    --chalk: #efe6cc;
+    --chalk-dim: #9fb0c2;
+    --lamp: #f2d93a;
+    --font-hand: "Shantell Sans", "Comic Neue", "Segoe Print", system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  html, body { background: var(--sky); color: var(--chalk); }
+  body { font-family: var(--font-hand); padding-inline: 16px; padding-block: 24px 32px; }
+  .wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
+  .scene-box { background: transparent; }
+  svg#scene { display: block; width: 100%; height: auto; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+  .bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; letter-spacing: .01em; text-wrap: balance; }
+  .bar p { margin: 2px 0 0; color: var(--chalk-dim); font-size: .95rem; min-height: 1.4em; }
+  .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .count { font-variant-numeric: tabular-nums; color: var(--chalk-dim); margin-right: 4px; }
+  .count b { color: var(--lamp); font-weight: 800; }
+  button {
+    font: 600 .95rem var(--font-hand); color: var(--ink); background: var(--chalk);
+    border: 2.5px solid var(--ink); border-radius: 10px 14px 9px 13px / 13px 9px 14px 10px;
+    padding: 6px 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); transition: transform .08s, box-shadow .08s;
+  }
+  button:hover { background: var(--lamp); }
+  button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  button:focus-visible { outline: 3px dashed var(--lamp); outline-offset: 3px; }
+
+  .room .light, .room .night { transition: opacity .16s cubic-bezier(.65, 0, .35, 1); }
+  .room .night { opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
+  .room.off .night { opacity: .84; }
+  .room.off .light { opacity: 0; }
+  .room .hit { fill: transparent; cursor: pointer; stroke: transparent; stroke-width: 3; stroke-dasharray: 6 6; outline: none; }
+  .room .hit:focus-visible { stroke: var(--chalk); }
+  .room.off:not(.suppress):hover .night { opacity: .7; }
+  @media (prefers-reduced-motion: reduce) { .room .light, .room .night { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="scene-box">
+    <svg id="scene" viewBox="112 82 818 496" role="group" aria-label="Cross-section of a house at night with nine rooms">
+      <defs>
+        <linearGradient id="cone" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff6d6" stop-opacity=".82"/>
+          <stop offset="1" stop-color="#fff6d6" stop-opacity=".14"/>
+        </linearGradient>
+        <radialGradient id="glow">
+          <stop offset="0" stop-color="#fff3c4" stop-opacity=".8"/>
+          <stop offset=".45" stop-color="#fff3c4" stop-opacity=".28"/>
+          <stop offset="1" stop-color="#fff3c4" stop-opacity="0"/>
+        </radialGradient>
+        <filter id="lightEdge" filterUnits="userSpaceOnUse" x="0" y="0" width="1000" height="620">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="11" result="n"/>
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+        </filter>
+        <filter id="inkEdge" filterUnits="userSpaceOnUse" x="0" y="0" width="1000" height="620">
+          <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="4" result="lo"/>
+          <feDisplacementMap in="SourceGraphic" in2="lo" scale="2.5" xChannelSelector="R" yChannelSelector="G" result="wob"/>
+          <feTurbulence type="fractalNoise" baseFrequency="0.6" numOctaves="2" seed="9" result="hi"/>
+          <feDisplacementMap in="wob" in2="hi" scale="3.5" xChannelSelector="G" yChannelSelector="R"/>
+        </filter>
+      </defs>
+    </svg>
+  </div>
+  <div class="bar">
+    <div>
+      <h1>Night House</h1>
+      <p id="caption">Click a room to flip its light.</p>
+    </div>
+    <div class="controls">
+      <span class="count" id="count"></span>
+      <button id="allOn" type="button">All on</button>
+      <button id="allOff" type="button">All off</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('scene');
+  const rc = rough.svg(svg);
+  const INK = '#0b0b0d';
+  let seed = 7;
+  const base = () => ({ stroke: INK, strokeWidth: 2, roughness: 1.4, bowing: 1, seed: seed++ });
+
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const put = (p, n) => (p.appendChild(n), n);
+  const D = {
+    poly: (p, pts, o) => put(p, rc.polygon(pts, { ...base(), ...o })),
+    rect: (p, x, y, w, h, o) => put(p, rc.rectangle(x, y, w, h, { ...base(), ...o })),
+    line: (p, x1, y1, x2, y2, o) => put(p, rc.line(x1, y1, x2, y2, { ...base(), ...o })),
+    circle: (p, x, y, d, o) => put(p, rc.circle(x, y, d, { ...base(), ...o })),
+    ellipse: (p, x, y, w, h, o) => put(p, rc.ellipse(x, y, w, h, { ...base(), ...o })),
+    path: (p, d, o) => put(p, rc.path(d, { ...base(), ...o })),
+    lines: (p, pts, o) => put(p, rc.linearPath(pts, { ...base(), ...o })),
+  };
+  const solid = c => ({ fill: c, fillStyle: 'solid' });
+
+  // colour helpers
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const mix = (a, b, t) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t).toString(16).padStart(2, '0')).join('');
+  const dark = (c, t = .25) => mix(c, '#1b1420', t);
+  const light = (c, t = .35) => mix(c, '#fff8e6', t);
+  const ptsAttr = pts => pts.map(p => p.join(',')).join(' ');
+
+  // ---------- Layers ----------
+  const bg = el('g', {}, svg);
+  const roomsLayer = el('g', {}, svg);
+  const walls = el('g', { 'pointer-events': 'none', filter: 'url(#inkEdge)' }, svg);
+  const front = el('g', { 'pointer-events': 'none' }, svg);
+
+  // ---------- Room geometry: tower + split-level middle + cantilevered wing ----------
+  const roomDefs = [
+    { id: 'bath',    name: 'Bathroom',     color: '#e8a0a8', on: true,  pts: [[148,562],[272,560],[270,434],[152,430]] },
+    { id: 'library', name: 'Tower library',color: '#3a9a5a', on: true,  pts: [[152,430],[270,434],[274,268],[226,110],[156,272]] },
+    { id: 'hall',    name: 'Hallway',      color: '#2b3f99', on: false, pts: [[272,560],[420,562],[419,402],[271,398],[270,434]] },
+    { id: 'kitchen', name: 'Kitchen',      color: '#b9cf45', on: true,  pts: [[420,562],[560,558],[558,440],[419,438]] },
+    { id: 'reading', name: 'Reading nook', color: '#f28a1a', on: true,  pts: [[271,398],[380,400],[382,189],[274,214],[274,268]] },
+    { id: 'nursery', name: 'Nursery',      color: '#b08ac6', on: true,  pts: [[380,400],[419,402],[419,438],[558,440],[560,306],[381,296]] },
+    { id: 'attic',   name: 'Attic music room', color: '#1b7f7a', on: false, pts: [[381,296],[560,306],[560,148],[382,189]] },
+    { id: 'living',  name: 'Living room',  color: '#e04a2a', on: true,  pts: [[560,558],[866,556],[862,404],[558.6,402],[558,440]] },
+    { id: 'bedroom', name: 'Bedroom',      color: '#2f6fb8', on: true,  pts: [[558.6,402],[862,404],[903,398],[899,320],[560,212],[560,306]] },
+  ];
+  // ---------- Lighting: whimsical flat rays and blocks of light, plus the fixtures ----------
+  const LIGHT = '#f6f0c6';
+  const flat = (g, pts, color = LIGHT) => {
+    D.poly(g, pts, { fill: color, fillStyle: 'solid', stroke: 'none', roughness: 1.3 });
+    D.poly(g, pts, { stroke: 'none', fill: mix(color, '#b99a50', .16), fillStyle: 'dots', hachureGap: 13, fillWeight: 1.1, roughness: 1.6 });
+  };
+  const block = flat;
+  // a ray that flares from (cx, y0) to (cx + skew, y1), bowed and uneven so it never reads as a clean trapezoid
+  const ray = (g, cx, y0, w0, y1, w1, o = {}) => {
+    const { skew = 0, bow = 8, color = LIGHT } = o;
+    const ym = (y0 + y1) / 2, cm = cx + skew / 2, wm = (w0 + w1) / 4;
+    flat(g, [
+      [cx - w0 / 2, y0], [cx + w0 / 2, y0],
+      [cm + wm + bow, ym - 4],
+      [cx + skew + w1 / 2, y1 + 4],
+      [cx + skew - w1 / 2 + 8, y1 - 3],
+      [cm - wm - bow * .4, ym + 8],
+    ], color);
+  };
+
+  const pendantCone = (g, x, ceil, drop, col = '#e3c560') => {
+    D.line(g, x, ceil, x, drop, { strokeWidth: 2 });
+    D.poly(g, [[x - 18, drop + 18], [x + 18, drop + 18], [x, drop]], { ...solid(col), strokeWidth: 2.4 });
+    D.circle(g, x, drop + 20, 7, { ...solid('#fffbe0'), strokeWidth: 1.8 });
+  };
+  const pendantDome = (g, x, ceil, drop, col = '#cd8a48') => {
+    D.line(g, x, ceil, x, drop, { strokeWidth: 2 });
+    D.path(g, `M${x - 20} ${drop + 16} Q${x - 20} ${drop} ${x} ${drop} Q${x + 20} ${drop} ${x + 20} ${drop + 16} Z`, { ...solid(col), strokeWidth: 2.4 });
+    D.circle(g, x, drop + 19, 7, { ...solid('#fffbe0'), strokeWidth: 1.8 });
+  };
+  const pendantGlobe = (g, x, ceil, drop, col = '#fff6d0') => {
+    D.line(g, x, ceil, x, drop, { strokeWidth: 2 });
+    D.circle(g, x, drop + 11, 24, { ...solid(col), strokeWidth: 2.4 });
+    D.circle(g, x, drop + 11, 9, { ...solid('#f2c84f'), strokeWidth: 1.4 });
+  };
+  const lantern = (g, x, ceil, y) => {
+    D.line(g, x, ceil, x, y - 15, { strokeWidth: 2 });
+    D.ellipse(g, x, y, 38, 28, { ...solid('#fff6d0'), strokeWidth: 2.4 });
+    D.path(g, `M${x - 8} ${y - 13} Q${x - 17} ${y} ${x - 8} ${y + 13}`, { strokeWidth: 1.5 });
+    D.path(g, `M${x + 8} ${y - 13} Q${x + 17} ${y} ${x + 8} ${y + 13}`, { strokeWidth: 1.5 });
+    D.line(g, x, y - 14, x, y + 14, { strokeWidth: 1.5 });
+    D.path(g, `M${x - 17} ${y} Q${x} ${y + 8} ${x + 17} ${y}`, { strokeWidth: 1.5 });
+  };
+  // flush bowl lamp that sits on the ceiling
+  const bowlLamp = (g, x, ceil) => {
+    D.rect(g, x - 5, ceil, 10, 7, { ...solid(INK), strokeWidth: 1.5 });
+    D.poly(g, [[x - 30, ceil + 6], [x + 30, ceil + 6], [x + 19, ceil + 22], [x, ceil + 29], [x - 19, ceil + 22]], { ...solid('#f8e7a8'), strokeWidth: 2.8 });
+    [-9, 0, 9].forEach(dx => D.circle(g, x + dx, ceil + 17, 4.5, { ...solid('#9a7b3c'), stroke: 'none' }));
+  };
+  // organic pebble pendant, outlined with nested inner contours
+  const blobLamp = (g, x, ceil, y, w, h, cream = '#fbf0d6') => {
+    const top = y - h / 2;
+    D.line(g, x, ceil, x, top + 2, { strokeWidth: 2 });
+    D.circle(g, x, ceil + (top - ceil) * .45, 5, { ...solid(INK), stroke: 'none' });
+    const blob = (s, ox = 0, oy = 0) => {
+      const W = w * s, H = h * s, X = x + ox, Y = y + oy;
+      return `M${X - W / 2} ${Y} C${X - W / 2} ${Y - H * .62} ${X + W * .32} ${Y - H * .66} ${X + W / 2} ${Y - H * .1} C${X + W / 2} ${Y + H * .32} ${X + W * .12} ${Y + H * .56} ${X} ${Y + H * .5} C${X - W * .34} ${Y + H * .5} ${X - W / 2} ${Y + H * .3} ${X - W / 2} ${Y} Z`;
+    };
+    D.path(g, blob(1), { ...solid(cream), strokeWidth: 3.2 });
+    D.path(g, blob(.74, -2, 1), { strokeWidth: 1.6, fill: 'none' });
+    D.lines(g, [[x, y - h * .42], [x + w * .26, y - h * .02], [x, y + h * .46], [x - w * .26, y - h * .02], [x, y - h * .42]], { strokeWidth: 1.6 });
+    D.line(g, x, y - h * .44, x, y + h * .48, { strokeWidth: 1.5 });
+  };
+  // vanity mirror with a column of bulbs down each side
+  const mirrorLight = (g, cx, top, w, h) => {
+    D.poly(g, [[cx - w / 2 + 1, top], [cx + w / 2, top + 1], [cx + w / 2 - 2, top + h], [cx - w / 2, top + h - 2]], { ...solid('#b7c9bf'), strokeWidth: 3.6 });
+    D.poly(g, [[cx + 2, top + 8], [cx + 9, top + 8], [cx - 2, top + h * .55], [cx - 9, top + h * .55]], { ...solid('#8e9d8f'), stroke: 'none' });
+    D.line(g, cx + 3, top + 6, cx - 7, top + h * .42, { stroke: '#f4f8f1', strokeWidth: 3 });
+    D.line(g, cx + 8, top + 22, cx - 2, top + h * .72, { stroke: INK, strokeWidth: 1.6 });
+    for (let i = 0; i < 4; i++) {
+      const y = top + 8 + i * (h - 16) / 3;
+      D.ellipse(g, cx - w / 2 - 14, y, 10, 10, { ...solid('#fff3b0'), strokeWidth: 2, roughness: .4 });
+      D.ellipse(g, cx + w / 2 + 14, y, 10, i === 2 ? 7 : 10, { ...solid('#fff3b0'), strokeWidth: 2, roughness: .4 });
+    }
+  };
+  // tall tapered lamp with a spotted shade and zig-zag feet
+  const tallLamp = (g, x, floor, col = '#f1a99b', spot = '#c9726f') => {
+    D.poly(g, [[x - 28, floor - 12], [x - 22, floor], [x - 13, floor - 8], [x - 2, floor], [x + 9, floor - 8], [x + 20, floor], [x + 28, floor - 12]], { ...solid(col), strokeWidth: 2.4 });
+    D.rect(g, x - 28, floor - 20, 56, 9, { ...solid(col), strokeWidth: 2.6 });
+    D.poly(g, [[x - 10, floor - 20], [x, floor - 36], [x + 10, floor - 20]], { ...solid(col), strokeWidth: 2.4 });
+    D.poly(g, [[x - 13, floor - 106], [x + 13, floor - 106], [x + 25, floor - 38], [x - 25, floor - 38]], { ...solid(col), strokeWidth: 2.8 });
+    [[-6, -90], [4, -80], [-10, -64], [8, -62], [0, -52], [-14, -48], [14, -50], [-4, -44]].forEach(([dx, dy], i) =>
+      D.circle(g, x + dx, floor + dy + 8, 4 + (i % 3), { ...solid(spot), stroke: 'none' }));
+    [[-5, -96, -8, -44], [3, -96, 4, -44], [10, -86, 15, -48]].forEach(([dx, dy, ex, ey]) =>
+      D.line(g, x + dx, floor + dy + 6, x + ex, floor + ey, { strokeWidth: 2 }));
+    D.poly(g, [[x - 6, floor - 106], [x + 6, floor - 106], [x, floor - 98]], { ...solid(INK), stroke: 'none' });
+  };
+  const tableLamp = (g, x, top, shadeCol = '#f6dcc0') => {
+    D.line(g, x, top, x, top - 22, { strokeWidth: 2.6 });
+    D.ellipse(g, x, top - 2, 16, 5, { ...solid(INK), strokeWidth: 1.5 });
+    D.poly(g, [[x - 14, top - 52], [x + 14, top - 52], [x + 22, top - 22], [x - 22, top - 22]], { ...solid(shadeCol), strokeWidth: 2.4 });
+  };
+  const sideTable = (g, x, top, floor, w = 44) => {
+    D.rect(g, x - w / 2, top, w, 6, { ...solid('#6b4a3a'), strokeWidth: 2 });
+    D.line(g, x - w / 2 + 5, top + 6, x - w / 2 + 3, floor, { strokeWidth: 2.4 });
+    D.line(g, x + w / 2 - 5, top + 6, x + w / 2 - 3, floor, { strokeWidth: 2.4 });
+  };
+
+  // ---------- Furniture helpers ----------
+  const WOOD = '#7a4a2e', CREAM = '#f6ecd0';
+  const armchair = (g, cx, floor, w, col) => {
+    const L = cx - w / 2;
+    D.rect(g, L + 4, floor - 60, w - 8, 36, { ...solid(col), strokeWidth: 2.4 });
+    D.rect(g, L + 2, floor - 28, w - 4, 12, { ...solid(mix(col, '#ffffff', .18)), strokeWidth: 2.4 });
+    D.rect(g, L - 3, floor - 40, 10, 24, { ...solid(col), strokeWidth: 2.4 });
+    D.rect(g, L + w - 7, floor - 40, 10, 24, { ...solid(col), strokeWidth: 2.4 });
+    D.line(g, L + 3, floor - 16, L + 1, floor, { strokeWidth: 2.4 });
+    D.line(g, L + w - 3, floor - 16, L + w - 1, floor, { strokeWidth: 2.4 });
+  };
+  const note = (g, x, y, col = '#f2d93a') => {
+    D.ellipse(g, x, y, 9, 7, { ...solid(col), strokeWidth: 1.6, roughness: .5 });
+    D.line(g, x + 4, y, x + 4, y - 16, { strokeWidth: 1.8 });
+    D.line(g, x + 4, y - 16, x + 10, y - 11, { strokeWidth: 1.8 });
+  };
+  const star = (g, x, y, s, col) => {
+    const p = [];
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? s * .45 : s; p.push([x + Math.cos(a) * r, y + Math.sin(a) * r]); }
+    D.poly(g, p, { ...solid(col), strokeWidth: 1.4, roughness: .6 });
+  };
+
+  const fixtures = {
+    bath: {
+      light: g => block(g, [[164, 438], [236, 432], [262, 444], [266, 486], [246, 510], [196, 506], [164, 512], [156, 474]], '#f7f0cc'),
+      draw: g => {
+        mirrorLight(g, 210, 442, 28, 56);
+        // sink
+        D.rect(g, 207, 502, 6, 12, { ...solid('#8a8f94'), strokeWidth: 1.8 });
+        D.rect(g, 207, 500, 17, 6, { ...solid('#8a8f94'), strokeWidth: 1.8 });
+        D.path(g, 'M184 514 L236 514 Q234 536 210 538 Q186 536 184 514 Z', { ...solid(CREAM), strokeWidth: 2.6 });
+        D.line(g, 186, 519, 234, 519, { strokeWidth: 1.6 });
+        D.path(g, 'M210 538 L210 548 Q210 553 204 553 Q198 553 198 559', { strokeWidth: 3, fill: 'none' });
+        // bath mat and plant
+        D.rect(g, 182, 553, 50, 6, { ...solid('#2f6fb8'), strokeWidth: 1.8 });
+        D.poly(g, [[246, 540], [262, 540], [259, 558], [249, 558]], { ...solid('#e04a2a'), strokeWidth: 2 });
+        [[254, 540, 244, 522], [254, 540, 256, 518], [254, 540, 266, 526]].forEach(([a, b, c, d]) =>
+          D.path(g, `M${a} ${b} Q${(a + c) / 2 - 4} ${(b + d) / 2} ${c} ${d}`, { stroke: '#1f6b4f', strokeWidth: 3, fill: 'none' }));
+      },
+    },
+    library: {
+      light: g => ray(g, 238, 272, 24, 440, 96, { skew: 4, bow: 6, color: '#f0ecb8' }),
+      draw: g => {
+        // porthole window
+        D.circle(g, 212, 206, 30, { ...solid('#101a4a'), strokeWidth: 3 });
+        D.line(g, 212, 192, 212, 220, { strokeWidth: 1.6 }); D.line(g, 198, 206, 226, 206, { strokeWidth: 1.6 });
+        // bookshelf
+        D.rect(g, 160, 300, 38, 130, { ...solid(WOOD), strokeWidth: 2.6 });
+        const rows = [300, 332, 364, 398, 430];
+        const bookCols = ['#f2d93a', '#e04a2a', '#f6ecd0', '#f28a1a', '#2f6fb8', '#b9cf45', '#e8a0a8'];
+        let k = 0;
+        for (let r = 0; r < 4; r++) {
+          if (r) D.line(g, 160, rows[r], 198, rows[r], { strokeWidth: 2.4 });
+          let x = 164;
+          while (x < 192) {
+            const w = 4 + (k * 7) % 4, hgt = 18 + (k * 5) % 9;
+            if (x + w > 195) break;
+            const tilt = (k % 5 === 4) ? 4 : 0;
+            D.poly(g, [[x, rows[r + 1] - 2], [x + w, rows[r + 1] - 2], [x + w + tilt, rows[r + 1] - 2 - hgt], [x + tilt, rows[r + 1] - 2 - hgt]],
+              { ...solid(bookCols[k % bookCols.length]), strokeWidth: 1.3, roughness: .6 });
+            x += w + 1 + tilt; k++;
+          }
+        }
+        // ladder leaning on the shelf
+        D.line(g, 204, 430, 194, 290, { strokeWidth: 2.4 });
+        D.line(g, 216, 430, 206, 290, { strokeWidth: 2.4 });
+        for (let y = 306; y < 430; y += 22) { const t = (y - 290) / 140; D.line(g, 194 + 10 * t, y, 206 + 10 * t, y, { strokeWidth: 2 }); }
+        armchair(g, 245, 430, 40, '#f28a1a');
+        lantern(g, 238, 150, 256);
+      },
+    },
+    hall: {
+      light: g => ray(g, 302, 424, 50, 564, 116, { skew: -4, bow: 7, color: '#f8e7a8' }),
+      draw: g => {
+        // stairs climbing to the right
+        const pts = [[322, 562]]; let x = 322, y = 560;
+        const run = 12, rise = 19.5;
+        for (let i = 0; i < 8; i++) { y -= rise; pts.push([x, y]); x += run; pts.push([x, y]); }
+        pts.push([422, 562]);
+        D.poly(g, pts, { ...solid('#f28a1a'), strokeWidth: 2.6 });
+        D.line(g, 324, 512, 418, 360, { strokeWidth: 3 });
+        for (let i = 0; i < 8; i++) { const sx = 328 + i * run, sy = 540.5 - i * rise; D.line(g, sx, sy, sx, 512 - (sx - 324) * 1.617 + 2, { strokeWidth: 1.6 }); }
+        // telephone table and a little picture
+        sideTable(g, 294, 526, 560, 36);
+        D.rect(g, 284, 514, 22, 12, { ...solid('#e04a2a'), strokeWidth: 2 });
+        D.path(g, 'M282 512 Q295 504 308 512', { strokeWidth: 3.4, fill: 'none' });
+        D.rect(g, 282, 450, 26, 22, { ...solid('#b9cf45'), strokeWidth: 2.4 });
+        D.circle(g, 295, 461, 8, { ...solid('#f2d93a'), stroke: 'none' });
+        bowlLamp(g, 302, 399);
+      },
+    },
+    kitchen: {
+      light: g => ray(g, 490, 474, 34, 564, 108, { skew: -4, bow: 7, color: '#f9e8a4' }),
+      draw: g => {
+        // fridge
+        D.rect(g, 426, 474, 30, 84, { ...solid(CREAM), strokeWidth: 2.6 });
+        D.line(g, 426, 500, 456, 500, { strokeWidth: 2 });
+        D.line(g, 451, 480, 451, 494, { strokeWidth: 2.4 }); D.line(g, 451, 506, 451, 522, { strokeWidth: 2.4 });
+        // counter
+        D.rect(g, 460, 520, 94, 38, { ...solid('#2f6fb8'), strokeWidth: 2.6 });
+        [491, 522].forEach(cx => D.line(g, cx, 522, cx, 556, { strokeWidth: 1.8 }));
+        [482, 500, 544].forEach(cx => D.circle(g, cx, 530, 4, { ...solid(INK), stroke: 'none' }));
+        D.rect(g, 457, 514, 100, 7, { ...solid(CREAM), strokeWidth: 2.2 });
+        // kettle
+        D.ellipse(g, 478, 504, 22, 18, { ...solid('#f2d93a'), strokeWidth: 2.2 });
+        D.line(g, 488, 502, 497, 495, { strokeWidth: 2.4 });
+        D.path(g, 'M470 497 Q478 486 486 497', { strokeWidth: 2, fill: 'none' });
+        // plant
+        D.poly(g, [[532, 500], [548, 500], [546, 514], [534, 514]], { ...solid('#e04a2a'), strokeWidth: 2 });
+        [[540, 500, 532, 486], [540, 500, 542, 482], [540, 500, 550, 488]].forEach(([a, b, c, d]) =>
+          D.path(g, `M${a} ${b} Q${(a + c) / 2 - 3} ${(b + d) / 2} ${c} ${d}`, { stroke: '#1f6b4f', strokeWidth: 3, fill: 'none' }));
+        // jar shelf
+        D.line(g, 518, 470, 556, 470, { strokeWidth: 3 });
+        [[522, 12, '#f28a1a'], [536, 9, '#e04a2a'], [547, 14, CREAM]].forEach(([x, h, c]) => D.rect(g, x, 470 - h, 9, h, { ...solid(c), strokeWidth: 1.6, roughness: .6 }));
+        pendantDome(g, 490, 436, 452, '#e04a2a');
+      },
+    },
+    reading: {
+      light: g => {
+        ray(g, 352, 298, 30, 184, 90, { skew: 6, bow: 6, color: '#f3ebb8' });
+        ray(g, 352, 326, 34, 404, 92, { skew: -6, bow: 7, color: '#f8e3a0' });
+      },
+      draw: g => {
+        D.ellipse(g, 324, 398, 96, 9, { ...solid('#e04a2a'), strokeWidth: 1.8 });
+        // framed picture
+        D.rect(g, 284, 258, 32, 26, { ...solid('#2f6fb8'), strokeWidth: 2.6 });
+        D.poly(g, [[287, 281], [297, 266], [304, 275], [309, 269], [313, 281]], { ...solid('#b9cf45'), stroke: 'none', roughness: .6 });
+        armchair(g, 302, 398, 42, '#1b7f7a');
+        D.rect(g, 294, 362, 14, 6, { ...solid('#f2d93a'), strokeWidth: 1.6 });
+        // floor lamp
+        D.line(g, 352, 398, 352, 326, { strokeWidth: 2.8 });
+        D.ellipse(g, 352, 398, 30, 7, { ...solid(INK), strokeWidth: 1.6 });
+        D.poly(g, [[336, 298], [368, 298], [378, 326], [326, 326]], { ...solid(CREAM), strokeWidth: 2.4 });
+      },
+    },
+    nursery: {
+      light: g => ray(g, 492, 352, 24, 442, 118, { skew: -4, bow: 6, color: '#f4efc6' }),
+      draw: g => {
+        [[402, 330, 7], [424, 314, 5], [540, 326, 6], [396, 356, 4]].forEach(([x, y, s]) => star(g, x, y, s, '#f2d93a'));
+        // toy box and ball on the lower step
+        D.rect(g, 384, 378, 30, 22, { ...solid('#f2d93a'), strokeWidth: 2.4 });
+        D.line(g, 384, 385, 414, 385, { strokeWidth: 1.6 });
+        D.circle(g, 404, 370, 14, { ...solid('#2f6fb8'), strokeWidth: 2 });
+        // crib
+        D.rect(g, 447, 414, 86, 10, { ...solid('#b9cf45'), strokeWidth: 2 });
+        D.line(g, 444, 394, 536, 394, { strokeWidth: 2.6 });
+        D.line(g, 444, 426, 536, 426, { strokeWidth: 2.6 });
+        for (let x = 454; x < 532; x += 10) D.line(g, x, 394, x, 426, { strokeWidth: 1.6 });
+        D.rect(g, 438, 380, 7, 58, { ...solid(CREAM), strokeWidth: 2.2 });
+        D.rect(g, 535, 384, 7, 54, { ...solid(CREAM), strokeWidth: 2.2 });
+        D.circle(g, 441, 378, 9, { ...solid(CREAM), strokeWidth: 2 });
+        D.circle(g, 538, 382, 9, { ...solid(CREAM), strokeWidth: 2 });
+        pendantGlobe(g, 492, 302, 328);
+      },
+    },
+    attic: {
+      light: g => ray(g, 486, 214, 34, 310, 116, { skew: 6, bow: 9, color: '#f5e6b0' }),
+      draw: g => {
+        // upright piano and stool
+        D.rect(g, 390, 226, 64, 8, { ...solid('#1a2a6b'), strokeWidth: 2.4 });
+        D.rect(g, 393, 234, 58, 64, { ...solid('#2b3f99'), strokeWidth: 2.6 });
+        D.rect(g, 409, 240, 24, 15, { ...solid(CREAM), strokeWidth: 1.6 });
+        [245, 250].forEach(y => D.line(g, 412, y, 430, y, { strokeWidth: 1 }));
+        D.rect(g, 395, 262, 54, 7, { ...solid(CREAM), strokeWidth: 1.8 });
+        for (let x = 401; x < 449; x += 6) D.line(g, x, 262, x, 267, { strokeWidth: 1.3 });
+        D.rect(g, 408, 282, 26, 6, { ...solid('#e04a2a'), strokeWidth: 2 });
+        D.line(g, 412, 288, 411, 300, { strokeWidth: 2.2 }); D.line(g, 430, 288, 431, 300, { strokeWidth: 2.2 });
+        note(g, 436, 210); note(g, 452, 198, '#b9cf45');
+        // gramophone on a little table
+        sideTable(g, 526, 274, 304, 38);
+        D.rect(g, 513, 260, 26, 14, { ...solid('#f2d93a'), strokeWidth: 2.2 });
+        D.line(g, 526, 260, 532, 240, { strokeWidth: 2.2 });
+        D.poly(g, [[530, 244], [535, 240], [552, 212], [536, 204]], { ...solid('#f28a1a'), strokeWidth: 2.2 });
+        D.ellipse(g, 544, 207, 20, 11, { ...solid('#f28a1a'), strokeWidth: 2.2 });
+        pendantCone(g, 486, 165, 192, '#f2d93a');
+      },
+    },
+    living: {
+      light: g => {
+        block(g, [[612, 412], [668, 408], [738, 412], [796, 408], [810, 440], [770, 462], [736, 482], [700, 488], [654, 474], [622, 454]], '#fbf0d6');
+        block(g, [[562, 448], [608, 438], [630, 458], [634, 496], [598, 506], [564, 500]], '#fbe6b8');
+        block(g, [[804, 444], [850, 436], [862, 462], [860, 502], [820, 508], [802, 478]], '#fbe6b8');
+      },
+      draw: g => {
+        D.ellipse(g, 712, 556, 220, 10, { ...solid('#1a2a6b'), strokeWidth: 1.8 });
+        // sofa
+        D.rect(g, 644, 498, 136, 30, { ...solid('#1b7f7a'), strokeWidth: 2.6 });
+        D.rect(g, 638, 524, 148, 16, { ...solid('#25938d'), strokeWidth: 2.6 });
+        D.rect(g, 630, 506, 14, 36, { ...solid('#1b7f7a'), strokeWidth: 2.6 });
+        D.rect(g, 780, 506, 14, 36, { ...solid('#1b7f7a'), strokeWidth: 2.6 });
+        D.line(g, 712, 500, 712, 526, { strokeWidth: 1.6 });
+        D.line(g, 640, 540, 637, 554, { strokeWidth: 2.6 }); D.line(g, 784, 540, 787, 554, { strokeWidth: 2.6 });
+        D.poly(g, [[668, 503], [682, 514], [668, 525], [654, 514]], { ...solid('#f2d93a'), strokeWidth: 2 });
+        D.poly(g, [[690, 505], [702, 515], [690, 525], [678, 515]], { ...solid('#e8a0a8'), strokeWidth: 2 });
+        blobLamp(g, 652, 404, 430, 46, 30);
+        blobLamp(g, 708, 404, 452, 52, 34);
+        blobLamp(g, 770, 404, 432, 52, 36);
+        tallLamp(g, 594, 556);
+        tallLamp(g, 830, 556);
+      },
+    },
+    bedroom: {
+      light: g => {
+        ray(g, 700, 312, 34, 404, 150, { skew: -6, bow: 9, color: '#f7e8b4' });
+        block(g, [[814, 322], [870, 334], [880, 356], [876, 380], [830, 384], [810, 352]], '#f9e0a0');
+      },
+      draw: g => {
+        // window with the moon
+        D.rect(g, 576, 252, 48, 44, { ...solid('#101a4a'), strokeWidth: 3 });
+        D.line(g, 600, 252, 600, 296, { strokeWidth: 2 }); D.line(g, 576, 274, 624, 274, { strokeWidth: 2 });
+        D.rect(g, 572, 296, 56, 6, { ...solid(WOOD), strokeWidth: 2 });
+        // bed, headboard on the right
+        D.ellipse(g, 720, 402, 190, 8, { ...solid('#f2d93a'), strokeWidth: 1.8 });
+        D.rect(g, 632, 356, 10, 46, { ...solid(WOOD), strokeWidth: 2.4 });
+        D.rect(g, 800, 334, 12, 68, { ...solid(WOOD), strokeWidth: 2.4 });
+        D.rect(g, 640, 376, 162, 10, { ...solid(WOOD), strokeWidth: 2.2 });
+        D.rect(g, 640, 362, 162, 14, { ...solid(CREAM), strokeWidth: 2.2 });
+        D.poly(g, [[676, 358], [776, 358], [780, 386], [672, 386]], { ...solid('#e04a2a'), strokeWidth: 2.4 });
+        D.line(g, 676, 366, 778, 366, { stroke: '#e8a0a8', strokeWidth: 3 });
+        D.ellipse(g, 786, 356, 30, 14, { ...solid('#fffaf0'), strokeWidth: 2 });
+        D.line(g, 646, 386, 646, 400, { strokeWidth: 2.4 }); D.line(g, 796, 386, 796, 400, { strokeWidth: 2.4 });
+        sideTable(g, 846, 372, 402, 40); tableLamp(g, 846, 372, CREAM);
+        pendantCone(g, 700, 257, 284, '#f2d93a');
+      },
+    },
+  };
+  const rooms = roomDefs.map(r => ({ ...r, ...fixtures[r.id] }));
+
+  // ---------- Build rooms ----------
+  const caption = document.getElementById('caption');
+  const count = document.getElementById('count');
+  const defaultCaption = caption.textContent;
+
+  rooms.forEach(r => {
+    const g = el('g', { class: 'room' + (r.on ? '' : ' off') }, roomsLayer);
+    const clip = el('clipPath', { id: 'clip-' + r.id }, svg.querySelector('defs'));
+    el('polygon', { points: ptsAttr(r.pts) }, clip);
+
+    D.poly(g, r.pts, { ...solid(r.color), stroke: 'none', roughness: .8 });
+
+    const lightG = el('g', { class: 'light', 'clip-path': `url(#clip-${r.id})` }, g);
+    r.light(el('g', { filter: 'url(#lightEdge)' }, lightG));
+    const objs = el('g', { 'clip-path': `url(#clip-${r.id})` }, g);
+    r.draw(objs);
+    el('polygon', { class: 'night', points: ptsAttr(r.pts), fill: '#0e1745' }, g);
+    const hit = el('polygon', { class: 'hit', points: ptsAttr(r.pts), tabindex: 0, role: 'button' }, g);
+
+    r.g = g; r.hit = hit;
+    const label = () => `${r.name}: light ${r.on ? 'on' : 'off'}`;
+    const sync = () => { g.classList.toggle('off', !r.on); hit.setAttribute('aria-pressed', r.on); hit.setAttribute('aria-label', r.name + ' light'); };
+    r.set = v => { r.on = v; sync(); };
+    sync();
+
+    const toggle = () => { r.set(!r.on); g.classList.toggle('suppress', !r.on); caption.textContent = label(); updateCount(); };
+    hit.addEventListener('click', toggle);
+    hit.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+    hit.addEventListener('pointerenter', () => caption.textContent = label());
+    hit.addEventListener('focus', () => caption.textContent = label());
+    hit.addEventListener('pointerleave', () => { g.classList.remove('suppress'); caption.textContent = defaultCaption; });
+  });
+
+  // ---------- Walls, floors, roof ----------
+  rooms.forEach(r => D.poly(walls, r.pts, { strokeWidth: 9.9, roughness: .5, bowing: .3 }));
+  D.lines(walls, [[144, 563], [560, 560], [870, 558]], { strokeWidth: 13.2, roughness: .4, bowing: .2 });
+  // overhang brace under the bedroom
+  D.line(walls, 866, 484, 901, 402, { strokeWidth: 7.7 });
+  // roof slabs
+  D.poly(walls, [[560, 212], [920, 327], [920, 309], [560, 194]], { ...solid(INK), roughness: .4 });
+  D.poly(walls, [[256, 218], [580, 143], [580, 126], [256, 201]], { ...solid(INK), roughness: .4 });
+  D.poly(walls, [[128, 296], [224, 92], [236, 100], [142, 302]], { ...solid(INK), roughness: .4 });
+  D.poly(walls, [[224, 92], [240, 104], [274, 262], [274, 268], [226, 110]], { ...solid(INK), roughness: .4 });
+  D.poly(walls, [[252, 208], [275, 210], [275, 273], [267, 273]], { ...solid(INK), roughness: .3 });
+  // ---------- Controls ----------
+  function updateCount() {
+    const n = rooms.filter(r => r.on).length;
+    count.innerHTML = `<b>${n}</b> of ${rooms.length} lit`;
+  }
+  document.getElementById('allOn').addEventListener('click', () => { rooms.forEach(r => r.set(true)); updateCount(); });
+  document.getElementById('allOff').addEventListener('click', () => { rooms.forEach(r => r.set(false)); updateCount(); });
+  updateCount();
+})();
+</script>
+
+</body></html>

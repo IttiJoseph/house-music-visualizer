@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Night House stems — listening page</title>
+<style>
+  body{font:16px -apple-system,system-ui,sans-serif;background:#262872;color:#efe6cc;max-width:520px;margin:32px auto;padding:0 16px}
+  h1{font-size:1.4rem} p{color:#9fb0c2}
+  .row{display:flex;align-items:center;gap:12px;margin:8px 0}
+  button{font:inherit;padding:8px 14px;border-radius:10px;border:2px solid #0b0b0d;background:#efe6cc;cursor:pointer}
+  button.on{background:#f2d93a} .row span{flex:1}
+</style></head><body>
+<h1>Night House — stems</h1>
+<p>Dev-only page. Tap a stem to hear it alone (it loops), or turn several on to hear them together. They all start at the same moment, so they stay in sync.</p>
+<div class="row"><button id="go">▶ Start</button><button id="all">All on</button><button id="none">All off</button></div>
+<div id="list"></div>
+<script>
+const stems=['kick','bass','snare','hats','groove','percs','epiano','piano','guitar'];
+const vol={kick:1,bass:1,snare:1,hats:1,groove:1,percs:1,epiano:1,piano:1,guitar:1};
+let ctx,master,nodes={};
+const list=document.getElementById('list');
+stems.forEach(s=>{const r=document.createElement('div');r.className='row';r.innerHTML=`<span>${s}</span><button data-s="${s}">off</button>`;list.append(r)});
+function set(s,on){const b=list.querySelector(`[data-s=${s}]`);b.textContent=on?'on':'off';b.classList.toggle('on',on);if(nodes[s])nodes[s].gain.value=on?1:0;b._on=on}
+list.addEventListener('click',e=>{const b=e.target.closest('button');if(b)set(b.dataset.s,!b._on)});
+document.getElementById('all').onclick=()=>stems.forEach(s=>set(s,true));
+document.getElementById('none').onclick=()=>stems.forEach(s=>set(s,false));
+document.getElementById('go').onclick=async e=>{
+  e.target.disabled=true;e.target.textContent='Loading…';
+  ctx=new AudioContext();master=ctx.createGain();master.gain.value=.6;master.connect(ctx.destination);
+  const bufs=await Promise.all(stems.map(s=>fetch(`../public/audio/${s}.m4a`).then(r=>r.arrayBuffer()).then(a=>ctx.decodeAudioData(a))));
+  const t0=ctx.currentTime+.1;
+  stems.forEach((s,i)=>{const g=ctx.createGain();g.gain.value=list.querySelector(`[data-s=${s}]`)._on?1:0;g.connect(master);
+    const src=ctx.createBufferSource();src.buffer=bufs[i];src.loop=true;src.loopStart=0;src.loopEnd=16;src.connect(g);src.start(t0);nodes[s]=g});
+  e.target.textContent='Playing';
+};
+</script></body></html>

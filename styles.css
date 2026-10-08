@@ -1,0 +1,74 @@
+/* Night House — layout: one wide hand-drawn scene, a slim control strip beneath it.
+   Single night-time look by design. */
+
+/* TITLE FONT: swap the family in --font-hand to change the font everywhere.
+   Shantell Sans is self-hosted (public/fonts) so the site makes no outside requests. */
+@font-face {
+  font-family: "Shantell Sans";
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url("public/fonts/shantell-sans-latin.woff2") format("woff2");
+}
+
+:root {
+  --sky: #3b3c96;
+  --sky-deep: #262872;
+  --ink: #0b0b0d;
+  --chalk: #efe6cc;
+  --chalk-dim: #9fb0c2;
+  --lamp: #f2d93a;
+  --font-hand: "Shantell Sans", "Comic Neue", "Segoe Print", system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+/* BACKGROUND: change this one rule to give the page a custom background. */
+html, body { background: var(--sky); color: var(--chalk); }
+
+body {
+  margin: 0;
+  font-family: var(--font-hand);
+  font-size: 14px;
+  padding-inline: 16px;
+  padding-block: 24px 32px;
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(32px, env(safe-area-inset-bottom));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
+.scene-box { background: transparent; }
+svg#scene { display: block; width: 100%; height: auto; }
+
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.bar h1 { margin: 0; font-size: clamp(1.4rem, 3vw, 1.9rem); font-weight: 800; letter-spacing: .01em; text-wrap: balance; }
+.bar p { margin: 2px 0 0; color: var(--chalk-dim); font-size: .95rem; min-height: 1.4em; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.count { font-variant-numeric: tabular-nums; color: var(--chalk-dim); margin-right: 4px; }
+.count b { color: var(--lamp); font-weight: 800; }
+
+button {
+  font: 600 .95rem var(--font-hand); color: var(--ink); background: var(--chalk);
+  border: 2.5px solid var(--ink); border-radius: 10px 14px 9px 13px / 13px 9px 14px 10px;
+  padding: 6px 14px; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); transition: transform .08s, box-shadow .08s;
+}
+button:hover { background: var(--lamp); }
+button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+button:focus-visible { outline: 3px dashed var(--lamp); outline-offset: 3px; }
+
+/* Rooms: light on/off */
+.room .light, .room .night { transition: opacity .16s cubic-bezier(.65, 0, .35, 1); }
+.room .night { opacity: 0; mix-blend-mode: multiply; pointer-events: none; }
+.room.off .night { opacity: .84; }
+.room.off .light { opacity: 0; }
+.room .hit { fill: transparent; cursor: pointer; stroke: transparent; stroke-width: 3; stroke-dasharray: 6 6; outline: none; }
+.room .hit:focus-visible { stroke: var(--chalk); }
+.room.off:not(.suppress):hover .night { opacity: .7; }
+
+/* Loading state while the nine stems download and decode */
+body.loading .scene-box { cursor: progress; }
+body.loading .count { animation: pulse 1s ease-in-out infinite alternate; }
+@keyframes pulse { to { opacity: .35; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .room .light, .room .night { transition: none; }
+  body.loading .count { animation: none; }
+}
